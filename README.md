@@ -1,5 +1,7 @@
 # Gemini CLI Skill for Claude Code
 
+[中文文档](#gemini-cli-skill-for-claude-code-中文)
+
 A Claude Code skill that lets you delegate tasks to [Gemini CLI](https://github.com/google-gemini/gemini-cli) directly from your Claude Code session.
 
 ## What It Does
@@ -84,7 +86,9 @@ Use gemini to review the frontend and backend code simultaneously.
 
 ---
 
-# Gemini CLI Skill for Claude Code（中文说明）
+# Gemini CLI Skill for Claude Code 中文
+
+[English](#gemini-cli-skill-for-claude-code)
 
 这是一个 Claude Code skill，让你可以在 Claude Code 会话中直接调用 [Gemini CLI](https://github.com/google-gemini/gemini-cli)，将任务委托给 Gemini 执行。
 
