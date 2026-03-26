@@ -1,0 +1,28 @@
+{
+  "name": "gemini-runner",
+  "version": "1.0.0",
+  "description": "CLI task manager for Gemini CLI with daemon and standalone modes",
+  "type": "module",
+  "main": "dist/cli.js",
+  "bin": {
+    "gemini-runner": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/cli.js",
+    "dev": "tsx src/cli.ts",
+    "deploy": "./scripts/deploy-global.sh"
+  },
+  "dependencies": {
+    "nanoid": "^5.0.0",
+    "tree-kill": "^1.2.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
