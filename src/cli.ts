@@ -16,6 +16,7 @@ import type {
   TaskRecord,
   TaskState,
   Verbosity,
+  Backend,
 } from './shared/protocol.js';
 
 // ── Arg parsing helpers ──
@@ -70,6 +71,14 @@ async function useDaemon(): Promise<boolean> {
   return isDaemonRunning();
 }
 
+// ── Backend validation ──
+
+function parseBackend(value: string | undefined, defaultBackend: Backend): Backend {
+  if (!value) return defaultBackend;
+  if (value === 'gemini' || value === 'kimi') return value;
+  die(`Invalid backend: ${value}. Must be 'gemini' or 'kimi'`);
+}
+
 // ── Main routing ──
 
 const command = args.shift();
@@ -93,7 +102,7 @@ async function main(): Promise<void> {
     case undefined:
       return printUsage();
     default:
-      die(`Unknown command: ${command}. Run 'gemini-runner help' for usage.`);
+      die(`Unknown command: ${command}. Run 'cli-agent help' for usage.`);
   }
 }
 
@@ -138,6 +147,8 @@ async function handleStart(): Promise<void> {
   const prompt = opt('-p') || opt('--prompt');
   if (!prompt) die('Missing required flag: -p "prompt"');
 
+  const cfg = loadConfig();
+
   const params: StartParams = {
     prompt,
     workingDir: opt('--cwd') || opt('-C') || process.cwd(),
@@ -145,6 +156,7 @@ async function handleStart(): Promise<void> {
     approvalMode: (opt('--approval-mode') || opt('-a')) as StartParams['approvalMode'],
     timeout: opt('--timeout') ? Number(opt('--timeout')) : undefined,
     tags: optArray('--tag'),
+    backend: parseBackend(opt('--backend') || opt('-b'), cfg.defaultBackend),
   };
 
   if (await useDaemon()) {
@@ -154,7 +166,6 @@ async function handleStart(): Promise<void> {
     json(res.data);
   } else {
     // Standalone mode — fork runner process
-    const cfg = loadConfig();
     const id = nanoid(TASK_ID_LENGTH);
     const task: TaskRecord = {
       id,
@@ -165,6 +176,7 @@ async function handleStart(): Promise<void> {
       approvalMode: params.approvalMode || cfg.defaultApprovalMode,
       timeout: params.timeout ?? cfg.defaultTimeout,
       tags: params.tags || [],
+      backend: params.backend || cfg.defaultBackend,
       messages: [],
       toolCalls: [],
       startedAt: new Date().toISOString(),
@@ -183,7 +195,7 @@ async function handleStart(): Promise<void> {
     });
     child.unref();
 
-    json({ task_id: id, state: 'running', started_at: task.startedAt, mode: 'standalone' });
+    json({ task_id: id, state: 'running', started_at: task.startedAt, mode: 'standalone', backend: task.backend });
   }
 }
 
@@ -191,7 +203,7 @@ async function handleStart(): Promise<void> {
 
 async function handleStatus(): Promise<void> {
   const taskId = args.shift();
-  if (!taskId) die('Usage: gemini-runner status <task_id>');
+  if (!taskId) die('Usage: cli-agent status <task_id>');
 
   const verbosity = (opt('--verbosity') || opt('-v') || 'normal') as Verbosity;
   const tail = opt('--tail') ? Number(opt('--tail')) : undefined;
@@ -221,6 +233,7 @@ async function handleStatus(): Promise<void> {
     const res: Record<string, unknown> = {
       task_id: task.id,
       state: task.state,
+      backend: task.backend,
       progress: {
         messages: task.messages.length,
         tool_calls: task.toolCalls.length,
@@ -252,7 +265,7 @@ async function handleStatus(): Promise<void> {
 
 async function handleStop(): Promise<void> {
   const taskId = args.shift();
-  if (!taskId) die('Usage: gemini-runner stop <task_id>');
+  if (!taskId) die('Usage: cli-agent stop <task_id>');
 
   const force = flag('--force') || flag('-f');
 
@@ -304,13 +317,13 @@ async function handleList(): Promise<void> {
 
 function printUsage(): void {
   console.log(`
-gemini-runner — Gemini CLI task manager
+cli-agent — CLI task manager for Gemini and Kimi
 
 Usage:
-  gemini-runner <command> [options]
+  cli-agent <command> [options]
 
 Commands:
-  start -p "prompt"    Start a new Gemini task
+  start -p "prompt"    Start a new task
   status <task_id>     Query task status and output
   stop <task_id>       Stop a running task
   list                 List all tasks
@@ -320,8 +333,9 @@ Commands:
 
 Start options:
   -p, --prompt         Task prompt (required)
-  -m, --model          Gemini model name
+  -m, --model          Model name (backend-specific)
   -a, --approval-mode  default | auto_edit | yolo
+  -b, --backend        gemini | kimi (default: from config or kimi)
   -C, --cwd            Working directory
   --timeout <seconds>  Timeout (default: 600, 0 = none)
   --tag <name>         Add tag (repeatable)
@@ -343,6 +357,15 @@ Global options:
   --standalone         Force standalone mode
   --json               JSON output (default)
   -h, --help           Show this help
+
+Configuration:
+  ~/.cli-agent/config.json
+  {
+    "defaultBackend": "gemini",
+    "maxConcurrent": 3,
+    "defaultTimeout": 600,
+    "defaultApprovalMode": "auto_edit"
+  }
 `);
 }
 

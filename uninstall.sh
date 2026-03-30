@@ -2,9 +2,9 @@
 set -euo pipefail
 
 echo "Stopping daemon (if running)..."
-gemini-runner daemon stop 2>/dev/null || true
+cli-agent daemon stop 2>/dev/null || true
 
 echo "Unlinking gemini-runner..."
-npm unlink -g gemini-runner
+npm unlink -g cli-agent
 
-echo "Done! gemini-runner has been removed."
+echo "Done! cli-agent has been removed."

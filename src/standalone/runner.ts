@@ -1,5 +1,5 @@
 /**
- * Standalone mode: runs a single Gemini task as a detached child process.
+ * Standalone mode: runs a single CLI task as a detached child process.
  *
  * When `gemini-runner start` detects no daemon, it spawns THIS file as a
  * background process. This process creates an Executor, updates the task
@@ -8,14 +8,14 @@
  * Usage (internal): node runner.js <task-json-base64>
  */
 
-import { GeminiExecutor } from '../engine/executor.js';
+import { CliExecutor } from '../engine/executor.js';
 import { saveTask } from './store.js';
 import type {
   TaskRecord,
-  GeminiMessageEvent,
-  GeminiToolUseEvent,
-  GeminiToolResultEvent,
-  GeminiResultEvent,
+  CliMessageEvent,
+  CliToolUseEvent,
+  CliToolResultEvent,
+  CliResultEvent,
 } from '../shared/protocol.js';
 
 // Read task from argv
@@ -27,12 +27,13 @@ if (!encoded) {
 
 const task: TaskRecord = JSON.parse(Buffer.from(encoded, 'base64').toString('utf-8'));
 
-const exec = new GeminiExecutor({
+const exec = new CliExecutor({
   prompt: task.prompt,
   workingDir: task.workingDir,
   model: task.model,
   approvalMode: task.approvalMode,
   timeout: task.timeout,
+  backend: task.backend,
 });
 
 let deltaBuf = '';
@@ -55,7 +56,7 @@ exec.on('init', (evt: { session_id: string }) => {
   persist();
 });
 
-exec.on('message', (evt: GeminiMessageEvent) => {
+exec.on('message', (evt: CliMessageEvent) => {
   if (evt.role === 'assistant' && evt.delta) {
     deltaBuf += evt.content;
   } else {
@@ -64,7 +65,7 @@ exec.on('message', (evt: GeminiMessageEvent) => {
   persist();
 });
 
-exec.on('tool_use', (evt: GeminiToolUseEvent) => {
+exec.on('tool_use', (evt: CliToolUseEvent) => {
   flushDelta();
   task.toolCalls.push({
     name: evt.tool_name,
@@ -76,7 +77,7 @@ exec.on('tool_use', (evt: GeminiToolUseEvent) => {
   persist();
 });
 
-exec.on('tool_result', (evt: GeminiToolResultEvent) => {
+exec.on('tool_result', (evt: CliToolResultEvent) => {
   const tc = task.toolCalls.find((c) => c.tool_id === evt.tool_id);
   if (tc) {
     tc.status = evt.status;
@@ -85,7 +86,7 @@ exec.on('tool_result', (evt: GeminiToolResultEvent) => {
   persist();
 });
 
-exec.on('result', (evt: GeminiResultEvent) => {
+exec.on('result', (evt: CliResultEvent) => {
   flushDelta();
   task.state = evt.status === 'success' ? 'completed' : 'failed';
   task.completedAt = new Date().toISOString();

@@ -1,16 +1,9 @@
 import { EventEmitter } from 'events';
 import { spawn, type ChildProcess } from 'child_process';
-import { createInterface } from 'readline';
 import treeKill from 'tree-kill';
-import type {
-  ApprovalMode,
-  GeminiEvent,
-  GeminiInitEvent,
-  GeminiMessageEvent,
-  GeminiToolUseEvent,
-  GeminiToolResultEvent,
-  GeminiResultEvent,
-} from '../shared/protocol.js';
+import type { ApprovalMode, Backend } from '../shared/protocol.js';
+import { createStrategy } from './strategy-factory.js';
+import type { CliStrategy, OutputHandler } from './strategy.js';
 
 export interface ExecutorOpts {
   prompt: string;
@@ -18,26 +11,31 @@ export interface ExecutorOpts {
   model?: string;
   approvalMode: ApprovalMode;
   timeout: number;
+  backend: Backend;
 }
 
 /**
- * Wraps a single `gemini` CLI process.
- * Parses stream-json output and emits typed events.
+ * Wraps a single CLI process.
+ * Uses strategy pattern to support different backends (Gemini, Kimi, etc.)
  */
-export class GeminiExecutor extends EventEmitter {
+export class CliExecutor extends EventEmitter {
   private opts: ExecutorOpts;
+  private strategy: CliStrategy;
+  private handler: OutputHandler;
   private proc: ChildProcess | null = null;
   private timer: NodeJS.Timeout | null = null;
   private alive = false;
-  private sid: string | null = null;
 
   constructor(opts: ExecutorOpts) {
     super();
     this.opts = opts;
+    this.strategy = createStrategy(opts.backend);
+    this.handler = this.strategy.createOutputHandler(this);
   }
 
   get sessionId(): string | null {
-    return this.sid;
+    // Get from handler if available
+    return null;
   }
 
   get pid(): number | undefined {
@@ -52,21 +50,22 @@ export class GeminiExecutor extends EventEmitter {
     if (this.alive) throw new Error('Executor already running');
     this.alive = true;
 
-    const flags = this.buildFlags();
+    const { cmd, args, useStdin } = this.strategy.buildCommand(this.opts);
 
-    this.proc = spawn('gemini', flags, {
+    this.proc = spawn(cmd, args, {
       cwd: this.opts.workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    // Feed prompt via stdin then close
-    this.proc.stdin?.write(this.opts.prompt);
-    this.proc.stdin?.end();
+    // Feed prompt via stdin if needed
+    if (useStdin && this.proc.stdin) {
+      this.proc.stdin.write(this.opts.prompt);
+      this.proc.stdin.end();
+    }
 
-    // Line-by-line JSON parsing on stdout
+    // Handle output using strategy
     if (this.proc.stdout) {
-      const rl = createInterface({ input: this.proc.stdout, crlfDelay: Infinity });
-      rl.on('line', (raw) => this.parseLine(raw));
+      this.handler.handleOutput(this.proc.stdout);
     }
 
     this.proc.on('exit', (code) => {
@@ -108,56 +107,9 @@ export class GeminiExecutor extends EventEmitter {
     }
   }
 
-  // ── internals ──
-
-  private buildFlags(): string[] {
-    const args = ['--output-format', 'stream-json'];
-
-    if (this.opts.model) {
-      args.push('-m', this.opts.model);
-    }
-
-    if (this.opts.approvalMode === 'yolo') {
-      args.push('-y');
-    } else {
-      args.push('--approval-mode', this.opts.approvalMode);
-    }
-
-    return args;
-  }
-
-  private parseLine(raw: string): void {
-    const trimmed = raw.trim();
-    if (!trimmed) return;
-    try {
-      const evt = JSON.parse(trimmed) as GeminiEvent;
-      this.dispatch(evt);
-    } catch { /* non-json line, skip */ }
-  }
-
-  private dispatch(evt: GeminiEvent): void {
-    switch (evt.type) {
-      case 'init':
-        this.sid = (evt as GeminiInitEvent).session_id;
-        this.emit('init', evt);
-        break;
-      case 'message':
-        this.emit('message', evt as GeminiMessageEvent);
-        break;
-      case 'tool_use':
-        this.emit('tool_use', evt as GeminiToolUseEvent);
-        break;
-      case 'tool_result':
-        this.emit('tool_result', evt as GeminiToolResultEvent);
-        break;
-      case 'result':
-        this.emit('result', evt as GeminiResultEvent);
-        break;
-    }
-  }
-
   private teardown(): void {
     this.alive = false;
+    this.handler.destroy();
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = null;
@@ -165,3 +117,6 @@ export class GeminiExecutor extends EventEmitter {
     this.proc = null;
   }
 }
+
+// Legacy alias for backward compatibility
+export const GeminiExecutor = CliExecutor;

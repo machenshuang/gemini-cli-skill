@@ -1,11 +1,11 @@
 {
-  "name": "gemini-runner",
+  "name": "cli-agent",
   "version": "1.0.0",
-  "description": "CLI task manager for Gemini CLI with daemon and standalone modes",
+  "description": "CLI task manager for Gemini and Kimi with daemon and standalone modes",
   "type": "module",
   "main": "dist/cli.js",
   "bin": {
-    "gemini-runner": "dist/cli.js"
+    "cli-agent": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",

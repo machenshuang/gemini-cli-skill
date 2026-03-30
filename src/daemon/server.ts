@@ -151,6 +151,7 @@ export class DaemonServer {
       session_id: task.sessionId,
       state: task.state,
       started_at: task.startedAt,
+      backend: task.backend,
     };
   }
 
@@ -176,6 +177,7 @@ export class DaemonServer {
     const res: Record<string, unknown> = {
       task_id: task.id,
       state: task.state,
+      backend: task.backend,
       progress: {
         messages: task.messages.length,
         tool_calls: task.toolCalls.length,

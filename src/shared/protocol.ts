@@ -1,3 +1,7 @@
+// ── Backend type ──
+
+export type Backend = 'gemini' | 'kimi';
+
 // ── Task state machine ──
 
 export type TaskState =
@@ -11,16 +15,16 @@ export type TaskState =
 export type ApprovalMode = 'default' | 'auto_edit' | 'yolo';
 export type Verbosity = 'minimal' | 'normal' | 'full';
 
-// ── Gemini stream-json events ──
+// ── CLI stream-json events (compatible with both Gemini and Kimi) ──
 
-export interface GeminiInitEvent {
+export interface CliInitEvent {
   type: 'init';
   timestamp: string;
   session_id: string;
   model: string;
 }
 
-export interface GeminiMessageEvent {
+export interface CliMessageEvent {
   type: 'message';
   timestamp: string;
   role: 'user' | 'assistant';
@@ -28,7 +32,7 @@ export interface GeminiMessageEvent {
   delta?: boolean;
 }
 
-export interface GeminiToolUseEvent {
+export interface CliToolUseEvent {
   type: 'tool_use';
   timestamp: string;
   tool_name: string;
@@ -36,7 +40,7 @@ export interface GeminiToolUseEvent {
   parameters: Record<string, unknown>;
 }
 
-export interface GeminiToolResultEvent {
+export interface CliToolResultEvent {
   type: 'tool_result';
   timestamp: string;
   tool_id: string;
@@ -44,19 +48,27 @@ export interface GeminiToolResultEvent {
   output: string;
 }
 
-export interface GeminiResultEvent {
+export interface CliResultEvent {
   type: 'result';
   timestamp: string;
   status: 'success' | 'error';
   stats: TaskStats;
 }
 
-export type GeminiEvent =
-  | GeminiInitEvent
-  | GeminiMessageEvent
-  | GeminiToolUseEvent
-  | GeminiToolResultEvent
-  | GeminiResultEvent;
+export type CliEvent =
+  | CliInitEvent
+  | CliMessageEvent
+  | CliToolUseEvent
+  | CliToolResultEvent
+  | CliResultEvent;
+
+// Legacy aliases for backward compatibility
+export type GeminiInitEvent = CliInitEvent;
+export type GeminiMessageEvent = CliMessageEvent;
+export type GeminiToolUseEvent = CliToolUseEvent;
+export type GeminiToolResultEvent = CliToolResultEvent;
+export type GeminiResultEvent = CliResultEvent;
+export type GeminiEvent = CliEvent;
 
 // ── Task data structures ──
 
@@ -93,6 +105,7 @@ export interface TaskRecord {
   approvalMode: ApprovalMode;
   timeout: number;
   tags: string[];
+  backend: Backend;
   sessionId?: string;
   messages: Message[];
   toolCalls: ToolCall[];
@@ -138,6 +151,7 @@ export interface StartParams {
   approvalMode?: ApprovalMode;
   timeout?: number;
   tags?: string[];
+  backend?: Backend;
 }
 
 // ── Status params ──
@@ -169,4 +183,5 @@ export interface RunnerConfig {
   maxConcurrent: number;
   defaultTimeout: number;
   defaultApprovalMode: ApprovalMode;
+  defaultBackend: Backend;
 }

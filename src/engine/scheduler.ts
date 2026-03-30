@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid';
-import { GeminiExecutor } from './executor.js';
+import { CliExecutor } from './executor.js';
 import {
   TASK_ID_LENGTH,
   STALE_TASK_AGE_MS,
@@ -12,10 +12,10 @@ import type {
   StartParams,
   ListParams,
   RunnerConfig,
-  GeminiMessageEvent,
-  GeminiToolUseEvent,
-  GeminiToolResultEvent,
-  GeminiResultEvent,
+  CliMessageEvent,
+  CliToolUseEvent,
+  CliToolResultEvent,
+  CliResultEvent,
 } from '../shared/protocol.js';
 
 /**
@@ -24,7 +24,7 @@ import type {
  */
 export class Scheduler {
   private tasks = new Map<string, TaskRecord>();
-  private executors = new Map<string, GeminiExecutor>();
+  private executors = new Map<string, CliExecutor>();
   private deltaBuffers = new Map<string, string>();
   private config: RunnerConfig;
   private sweepTimer: NodeJS.Timeout | null = null;
@@ -46,6 +46,7 @@ export class Scheduler {
 
     const id = nanoid(TASK_ID_LENGTH);
     const now = new Date().toISOString();
+    const backend = params.backend || this.config.defaultBackend;
 
     const task: TaskRecord = {
       id,
@@ -56,6 +57,7 @@ export class Scheduler {
       approvalMode: params.approvalMode || this.config.defaultApprovalMode,
       timeout: params.timeout ?? this.config.defaultTimeout,
       tags: params.tags || [],
+      backend,
       messages: [],
       toolCalls: [],
       startedAt: now,
@@ -63,12 +65,13 @@ export class Scheduler {
 
     this.tasks.set(id, task);
 
-    const exec = new GeminiExecutor({
+    const exec = new CliExecutor({
       prompt: task.prompt,
       workingDir: task.workingDir,
       model: task.model,
       approvalMode: task.approvalMode,
       timeout: task.timeout,
+      backend,
     });
 
     this.executors.set(id, exec);
@@ -155,12 +158,12 @@ export class Scheduler {
     return n;
   }
 
-  private wireEvents(id: string, exec: GeminiExecutor, task: TaskRecord): void {
+  private wireEvents(id: string, exec: CliExecutor, task: TaskRecord): void {
     exec.on('init', (evt: { session_id: string }) => {
       task.sessionId = evt.session_id;
     });
 
-    exec.on('message', (evt: GeminiMessageEvent) => {
+    exec.on('message', (evt: CliMessageEvent) => {
       if (evt.role === 'assistant' && evt.delta) {
         const buf = this.deltaBuffers.get(id) || '';
         this.deltaBuffers.set(id, buf + evt.content);
@@ -169,7 +172,7 @@ export class Scheduler {
       }
     });
 
-    exec.on('tool_use', (evt: GeminiToolUseEvent) => {
+    exec.on('tool_use', (evt: CliToolUseEvent) => {
       this.flushDelta(id, task);
       task.toolCalls.push({
         name: evt.tool_name,
@@ -180,7 +183,7 @@ export class Scheduler {
       });
     });
 
-    exec.on('tool_result', (evt: GeminiToolResultEvent) => {
+    exec.on('tool_result', (evt: CliToolResultEvent) => {
       const tc = task.toolCalls.find((c) => c.tool_id === evt.tool_id);
       if (tc) {
         tc.status = evt.status;
@@ -188,7 +191,7 @@ export class Scheduler {
       }
     });
 
-    exec.on('result', (evt: GeminiResultEvent) => {
+    exec.on('result', (evt: CliResultEvent) => {
       this.flushDelta(id, task);
       task.state = evt.status === 'success' ? 'completed' : 'failed';
       task.completedAt = new Date().toISOString();
