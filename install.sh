@@ -1,21 +1,25 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -e
 
-cd "$(dirname "$0")"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BINARY_NAME="cli-agent"
+INSTALL_DIR="/usr/local/bin"
 
-echo "Installing dependencies..."
-npm install
+echo "Building $BINARY_NAME..."
+cd "$SCRIPT_DIR"
+go build -o "$BINARY_NAME" .
 
-echo "Building cli-agent..."
-npm run build
+echo "Installing $BINARY_NAME to $INSTALL_DIR..."
+sudo mv "$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
+sudo chmod +x "$INSTALL_DIR/$BINARY_NAME"
 
-echo "Linking globally..."
-npm link
+# Install Claude Code skills
+SKILLS_SRC="$SCRIPT_DIR/skills"
+if [ -d "$SKILLS_SRC" ]; then
+  CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
+  mkdir -p "$CLAUDE_SKILLS_DIR"
+  cp -r "$SKILLS_SRC/"* "$CLAUDE_SKILLS_DIR/"
+  echo "Skills installed to $CLAUDE_SKILLS_DIR"
+fi
 
-echo "Installing Claude Code skills..."
-mkdir -p ~/.claude/skills/gemini
-mkdir -p ~/.claude/skills/kimi
-cp skills/gemini/SKILL.md ~/.claude/skills/gemini/SKILL.md
-cp skills/kimi/SKILL.md ~/.claude/skills/kimi/SKILL.md
-
-echo "Done! Run 'cli-agent help' to verify."
+echo "Done! Run '$BINARY_NAME --help' to get started."

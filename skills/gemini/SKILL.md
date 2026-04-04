@@ -1,15 +1,13 @@
 ---
 name: gemini
-description: 当用户说"用 gemini"、"让 gemini"、"run gemini"、"ask gemini"、"gemini 帮我"、"delegate to gemini"、"use gemini to"、"gemini CLI"、"并行执行"、"parallel with gemini"，或需要将任务委托给 Gemini CLI 执行时，使用此技能。
+description: 当用户说"用 gemini"、"让 gemini"、"run gemini"、"ask gemini"、"gemini 帮我"、"delegate to gemini"、"use gemini to"、"gemini CLI"，或需要将任务委托给 Gemini CLI 执行时，使用此技能。
 ---
 
 # Gemini Runner Skill
 
-You have `cli-agent` CLI to manage Gemini CLI tasks. It supports two modes:
-- **Daemon mode**: a background daemon manages all tasks in memory (faster, real-time status)
-- **Standalone mode**: each task runs as an independent process with file-based state (no setup needed)
+You have `cli-agent` CLI to manage Gemini CLI tasks via a background daemon.
 
-The CLI auto-detects which mode to use. If a daemon is running, it routes through it; otherwise it falls back to standalone.
+The daemon must be running before starting any task. If it's not running, start it first with `cli-agent daemon start`.
 
 ## Quick Reference
 
@@ -19,8 +17,9 @@ cli-agent daemon start        # start background daemon
 cli-agent daemon stop         # stop daemon
 cli-agent daemon status       # check if daemon is running
 
-# Task operations
+# Task operations (backend: gemini)
 cli-agent start -p "prompt" -b gemini                          # start task
+cli-agent start -p "prompt" -b gemini -m gemini-3-flash-preview # with model
 cli-agent start -p "prompt" -b gemini -a yolo                  # auto-approve all
 cli-agent start -p "prompt" -b gemini -C /path/to/project      # in directory
 cli-agent start -p "prompt" -b gemini --tag review --tag urgent # with tags
@@ -33,6 +32,26 @@ cli-agent stop <task_id>                      # graceful stop
 cli-agent stop <task_id> --force              # force kill
 cli-agent list                                # all tasks
 cli-agent list --state running                # running only
+```
+
+## Critical Rules — Do Not Violate
+
+### 1. Never interrupt a running Gemini task
+Do NOT edit files, take over work, or make changes while a Gemini task is `state: running`.
+
+### 2. Always confirm completion via task ID
+Poll until `"state": "completed"`:
+```bash
+cli-agent status <task_id> --verbosity minimal
+```
+
+### 3. Do not enter Plan Mode while Gemini is running
+Plan Mode disables Bash, making it impossible to poll status. Always wait for full completion before switching modes.
+
+### 4. Check for running tasks immediately on task-notification
+As soon as a task-notification arrives, immediately run:
+```bash
+cli-agent list --state running
 ```
 
 ## Usage Patterns
@@ -54,3 +73,19 @@ cli-agent start -p "your prompt" -b gemini
 [Bash: cli-agent start -p "review backend" -b gemini --tag review   run_in_background=true]
 ```
 
+## Model Recommendations
+
+- `gemini-3-flash-preview` — fast, cheap, simple tasks
+- `gemini-3.1-pro-preview` — capable, complex reasoning
+
+## Configuration
+
+Set default backend and other options in `~/.cli-agent/config.json`:
+```json
+{
+  "defaultBackend": "gemini",
+  "maxConcurrent": 3,
+  "defaultTimeout": 600,
+  "defaultApprovalMode": "auto_edit"
+}
+```
